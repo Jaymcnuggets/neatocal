@@ -584,7 +584,6 @@ function neatocal_init() {
   let month_code_param = sp.get("month_code");
   let language_param = sp.get("language");
   let show_week_numbers_param = sp.get("show_week_numbers");
-  console.log({show_week_numbers_param})
 
   let datafn_param = sp.get("data");
 
