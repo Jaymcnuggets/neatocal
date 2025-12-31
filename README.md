@@ -29,6 +29,7 @@ Parameters
 | `layout` | Changes the layout of the calendar. `default`, `aligned-weekdays` or `hallon-almanackan`.  | [...?layout=aligned-weekdays](https://abetusk.github.io/neatocal?layout=aligned-weekdays)  [...?layout=hallon-almanackan](https://abetusk.github.io/neatocal?layout=hallon-almanackan) |
 | `start_day` | Start at day other than Monday. 0 indexed (`0`=Sun, `1`=Mon, ...). Only valid with `aligned-weekdays` layout  | [...?layout=aligned-weekdays&start_day=0](https://abetusk.github.io/neatocal?layout=aligned-weekdays&start_day=0) |
 | `highlight_color` | Change the weekend highlight color (default `eee`) | [...?highlight_color=fee](https://abetusk.github.io/neatocal?highlight_color=fee) |
+| `today_highlight_color` | Change the current day's highlight color | [...?today_highlight_color=f66](https://abetusk.github.io/neatocal?today_highlight_color=f66) |
 | `language` | Change the language for month and day codes. Values will be overridden if `month_code` or `language_code` is specified. | [...?language=ko-KR](https://abetusk.github.io/neatocal?language=ko-KR) |
 | `weekday_code` | Comma separated list of weekday codes to use (default `Su,M,T,W,R,F,Sa`). Elements can be blank if no weekday code is wanted. | [...?weekday_code=S,M,T,W,T,F,S](https://abetusk.github.io/neatocal?weekday_code=S,M,T,W,T,F,S) |
 | `weekday_format` | Change the representation of weekdays (`language` must be specified). `long`, `short` or `narrow` | [...?language=en&weekday_format=narrow](https://abetusk.github.io/neatocal?language=en&weekday_format=narrow) |
