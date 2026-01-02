@@ -31,6 +31,8 @@ var NEATOCAL_PARAM = {
   "data_fn": "",
 
   "data": { },
+  "ics_import_count": 0,
+  "ics_imports": [],
 
   "color_cell": [],
 
@@ -166,6 +168,34 @@ var NEATOCAL_PARAM = {
 
 };
 
+var ICS_PALETTE = [
+  { "bg": "#cfe8ff", "fg": "#000000" },
+  { "bg": "#1e4f8a", "fg": "#ffffff" },
+  { "bg": "#ffd6d6", "fg": "#000000" },
+  { "bg": "#8a1f2b", "fg": "#ffffff" },
+  { "bg": "#d8f5d0", "fg": "#000000" },
+  { "bg": "#1f6b3d", "fg": "#ffffff" },
+  { "bg": "#fff2b3", "fg": "#000000" },
+  { "bg": "#8a6b10", "fg": "#ffffff" }
+];
+
+// use __base to allow additional events from ics files to be
+// consolidated with any supplied via data param on page load
+function data_clone_base(data) {
+  let clone = JSON.parse(JSON.stringify(data || {}));
+  if (clone && typeof clone === "object") {
+    delete clone.__base;
+  }
+  return clone;
+}
+
+function data_set_base(data) {
+  let base = data_clone_base(data);
+  let current = data_clone_base(base);
+  current.__base = base;
+  NEATOCAL_PARAM.data = current;
+}
+
 // simple HTML convenience functions
 //
 var H = {
@@ -234,6 +264,68 @@ function weekend_date_styles(weekend_date_ele) { ele_styles(weekend_date_ele, "w
 function month_styles(month_ele) { ele_styles(month_ele, "month"); }
 function year_styles(year_ele) { ele_styles(year_ele, "year"); }
 
+function render_cell_data(td, yyyy_mm_dd) {
+  if (!(yyyy_mm_dd in NEATOCAL_PARAM.data)) { return; }
+
+  let val = NEATOCAL_PARAM.data[yyyy_mm_dd];
+
+  if (typeof val === "string") {
+    let txt = H.div();
+    txt.innerHTML = val;
+    txt.style.textAlign = "center";
+    txt.style.fontWeight = "300";
+    td.appendChild(txt);
+    return;
+  }
+
+  if (!Array.isArray(val)) { return; }
+
+  for (let i = 0; i < val.length; i++) {
+    let item = val[i];
+
+    if (typeof item === "string") {
+      let txt = H.div();
+      txt.innerHTML = item;
+      txt.style.textAlign = "center";
+      txt.style.fontWeight = "300";
+      td.appendChild(txt);
+      continue;
+    }
+
+    let line = H.div();
+    line.classList.add("event");
+    line.textContent = item.title || "";
+
+    if (item.color) {
+      line.style.background = item.color;
+    }
+    if (item.text_color) {
+      line.style.color = item.text_color;
+    }
+    if (item.span) {
+      line.classList.add("event-span");
+      if (item.span.start) { line.classList.add("event-span-start"); }
+      if (item.span.end) { line.classList.add("event-span-end"); }
+    }
+
+    td.appendChild(line);
+  }
+}
+
+function add_event_to_date(yyyy_mm_dd, event) {
+  if (!(yyyy_mm_dd in NEATOCAL_PARAM.data)) {
+    NEATOCAL_PARAM.data[yyyy_mm_dd] = [];
+  } else if (!Array.isArray(NEATOCAL_PARAM.data[yyyy_mm_dd])) {
+    NEATOCAL_PARAM.data[yyyy_mm_dd] = [NEATOCAL_PARAM.data[yyyy_mm_dd]];
+  }
+  NEATOCAL_PARAM.data[yyyy_mm_dd].push(event);
+}
+
+function get_view_range() {
+  let start = new Date(NEATOCAL_PARAM.year, NEATOCAL_PARAM.start_month, 1);
+  let end = new Date(NEATOCAL_PARAM.year, NEATOCAL_PARAM.start_month + NEATOCAL_PARAM.n_month, 1);
+  return { start: start, end: end };
+}
 
 
 // Moon phase calculation functions
@@ -534,14 +626,7 @@ function neatocal_hallon_almanackan() {
         }
 
         let yyyy_mm_dd = fmt_date(cur_year, cur_mo+1, idx+1);
-        if (yyyy_mm_dd in NEATOCAL_PARAM.data) {
-          let txt = H.div();
-          txt.innerHTML = NEATOCAL_PARAM.data[yyyy_mm_dd];
-          txt.style.textAlign = "center";
-          txt.style.fontWeight = "300";
-
-          td.appendChild(txt);
-        }
+        render_cell_data(td, yyyy_mm_dd);
 
         // Add moon phase if enabled
         //
@@ -639,13 +724,7 @@ function neatocal_default() {
         }
 
         let yyyy_mm_dd = fmt_date(cur_year, cur_mo+1, idx+1);
-        if (yyyy_mm_dd in NEATOCAL_PARAM.data) {
-          let txt = H.div();
-          txt.innerHTML = NEATOCAL_PARAM.data[yyyy_mm_dd];
-          txt.style.textAlign = "center";
-          txt.style.fontWeight = "300";
-          td.appendChild(txt);
-        }
+        render_cell_data(td, yyyy_mm_dd);
 
         // Add moon phase if enabled
         //
@@ -811,13 +890,7 @@ function neatocal_aligned_weekdays() {
         }
 
         let yyyy_mm_dd = fmt_date(cur_year, cur_mo+1, day_idx+1);
-        if (yyyy_mm_dd in NEATOCAL_PARAM.data) {
-          let txt = H.div();
-          txt.innerHTML = NEATOCAL_PARAM.data[yyyy_mm_dd];
-          txt.style.textAlign = "center";
-          txt.style.fontWeight = "300";
-          td.appendChild(txt);
-        }
+        render_cell_data(td, yyyy_mm_dd);
 
         // Add moon phase if enabled
         //
@@ -969,7 +1042,7 @@ function neatocal_parse_data(raw) {
 
       try {
         let json_data = JSON.parse(raw.target.response);
-        NEATOCAL_PARAM.data = json_data;
+        data_set_base(json_data);
 
         if (typeof NEATOCAL_PARAM.data.param !== "undefined") {
           neatocal_override_param(NEATOCAL_PARAM, NEATOCAL_PARAM.data.param);
@@ -992,6 +1065,406 @@ function neatocal_parse_data(raw) {
 
   }
 
+}
+
+function ics_unfold_lines(raw) {
+  let lines = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  let out = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    if ((line.startsWith(" ") || line.startsWith("\t")) && out.length > 0) {
+      out[out.length - 1] += line.slice(1);
+    } else {
+      out.push(line);
+    }
+  }
+
+  return out;
+}
+
+function ics_parse_datetime(value, params) {
+  let is_all_day = false;
+  let is_utc = false;
+
+  if (params && params.indexOf("VALUE=DATE") >= 0) {
+    is_all_day = true;
+  }
+
+  let match_date = value.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (match_date) {
+    is_all_day = true;
+    return {
+      date: new Date(parseInt(match_date[1]), parseInt(match_date[2]) - 1, parseInt(match_date[3])),
+      all_day: true
+    };
+  }
+
+  let match_dt = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/);
+  if (!match_dt) {
+    return null;
+  }
+
+  if (match_dt[7] === "Z") {
+    is_utc = true;
+  }
+
+  let year = parseInt(match_dt[1]);
+  let month = parseInt(match_dt[2]) - 1;
+  let day = parseInt(match_dt[3]);
+  let hour = parseInt(match_dt[4]);
+  let minute = parseInt(match_dt[5]);
+  let second = match_dt[6] ? parseInt(match_dt[6]) : 0;
+
+  let date = is_utc
+    ? new Date(Date.UTC(year, month, day, hour, minute, second))
+    : new Date(year, month, day, hour, minute, second);
+
+  return { date: date, all_day: is_all_day };
+}
+
+function ics_parse_events(raw) {
+  let lines = ics_unfold_lines(raw);
+  let events = [];
+  let current = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+
+    if (line === "BEGIN:VEVENT") {
+      current = {};
+      continue;
+    }
+    if (line === "END:VEVENT") {
+      if (current) { events.push(current); }
+      current = null;
+      continue;
+    }
+    if (!current) { continue; }
+
+    let idx = line.indexOf(":");
+    if (idx < 0) { continue; }
+
+    let name_params = line.slice(0, idx);
+    let value = line.slice(idx + 1);
+
+    let parts = name_params.split(";");
+    let name = parts[0];
+    let params = parts.slice(1).join(";");
+
+    if (name === "SUMMARY") {
+      current.summary = value;
+    } else if (name === "DTSTART") {
+      current.dtstart = { value: value, params: params };
+    } else if (name === "DTEND") {
+      current.dtend = { value: value, params: params };
+    } else if (name === "RRULE") {
+      current.rrule = value;
+    } else if (name === "DURATION") {
+      current.duration = value;
+    }
+  }
+
+  return events;
+}
+
+function ics_color_for_index(idx) {
+  return ICS_PALETTE[idx % ICS_PALETTE.length].bg;
+}
+
+function ics_text_color_for_index(idx) {
+  return ICS_PALETTE[idx % ICS_PALETTE.length].fg;
+}
+
+function ics_expand_event(event, color, text_color, source_id, view_start, view_end) {
+  if (!event.dtstart) { return; }
+
+  let start_parsed = ics_parse_datetime(event.dtstart.value, event.dtstart.params);
+  if (!start_parsed) { return; }
+
+  let end_parsed = null;
+  if (event.dtend) {
+    end_parsed = ics_parse_datetime(event.dtend.value, event.dtend.params);
+  }
+
+  let start_date = start_parsed.date;
+  let end_date = end_parsed ? end_parsed.date : new Date(start_date.getTime());
+  let all_day = start_parsed.all_day || (end_parsed && end_parsed.all_day);
+
+  if (!end_parsed) {
+    if (all_day) {
+      end_date = new Date(start_date.getTime() + 86400000);
+    }
+  }
+
+  let start_day = new Date(start_date.getFullYear(), start_date.getMonth(), start_date.getDate());
+  let end_day = new Date(end_date.getFullYear(), end_date.getMonth(), end_date.getDate());
+
+  if (all_day ||
+      (end_date.getHours() === 0 && end_date.getMinutes() === 0 && end_date.getSeconds() === 0)) {
+    end_day = new Date(end_day.getTime() - 86400000);
+  }
+
+  let view_start_day = new Date(view_start.getFullYear(), view_start.getMonth(), view_start.getDate());
+  let view_end_last = new Date(view_end.getTime() - 86400000);
+
+  let cur = new Date(start_day.getTime());
+  while (cur <= end_day) {
+    if (cur >= view_start && cur < view_end) {
+      let date_id = fmt_date(cur.getFullYear(), cur.getMonth() + 1, cur.getDate());
+      let is_start = (cur.getTime() === start_day.getTime()) ||
+        (cur.getTime() === view_start_day.getTime() && start_day < view_start_day);
+      let is_end = (cur.getTime() === end_day.getTime()) ||
+        (cur.getTime() === view_end_last.getTime() && end_day > view_end_last);
+
+      add_event_to_date(date_id, {
+        title: event.summary || "(no title)",
+        color: color,
+        text_color: text_color,
+        source_id: source_id,
+        span: {
+          start: is_start,
+          end: is_end
+        }
+      });
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+}
+
+function ics_import_text(raw, color, text_color, source_id) {
+  let events = ics_parse_events(raw);
+  let view = get_view_range();
+
+  for (let i = 0; i < events.length; i++) {
+    if (events[i].rrule) {
+      continue;
+    }
+    ics_expand_event(events[i], color, text_color, source_id, view.start, view.end);
+  }
+}
+
+function ics_reset_data() {
+  if (NEATOCAL_PARAM.data && NEATOCAL_PARAM.data.__base) {
+    data_set_base(NEATOCAL_PARAM.data.__base);
+  } else {
+    data_set_base({});
+  }
+}
+
+function ics_update_style(source_id, color, text_color) {
+  for (let i = 0; i < NEATOCAL_PARAM.ics_imports.length; i++) {
+    if (NEATOCAL_PARAM.ics_imports[i].id === source_id) {
+      NEATOCAL_PARAM.ics_imports[i].color = color;
+      NEATOCAL_PARAM.ics_imports[i].text_color = text_color;
+      break;
+    }
+  }
+
+  let keys = Object.keys(NEATOCAL_PARAM.data);
+  for (let k = 0; k < keys.length; k++) {
+    let val = NEATOCAL_PARAM.data[keys[k]];
+    if (!Array.isArray(val)) { continue; }
+    for (let i = 0; i < val.length; i++) {
+      if (val[i] && val[i].source_id === source_id) {
+        val[i].color = color;
+        val[i].text_color = text_color;
+      }
+    }
+  }
+
+  render_ics_legend();
+  neatocal_render();
+}
+
+function ics_handle_files(file_list) {
+  let files = Array.from(file_list).filter(f => f.name.toLowerCase().endsWith(".ics"));
+  if (files.length === 0) { return; }
+
+  let reads = files.map((file, idx) => {
+    return new Promise((resolve) => {
+      let reader = new FileReader();
+      reader.onload = function() {
+        resolve({ text: reader.result, idx: idx });
+      };
+      reader.readAsText(file);
+    });
+  });
+
+  Promise.all(reads).then((results) => {
+    for (let i = 0; i < results.length; i++) {
+      let import_id = NEATOCAL_PARAM.ics_import_count + results[i].idx;
+      let color = ics_color_for_index(import_id);
+      let text_color = ics_text_color_for_index(import_id);
+      let file = files[results[i].idx];
+      let label = file ? file.name.replace(/\.ics$/i, "") : ("Calendar " + (import_id + 1).toString());
+
+      NEATOCAL_PARAM.ics_imports.push({
+        id: import_id,
+        name: label,
+        color: color,
+        text_color: text_color
+      });
+
+      ics_import_text(results[i].text, color, text_color, import_id);
+    }
+    NEATOCAL_PARAM.ics_import_count += results.length;
+    render_ics_legend();
+    neatocal_render();
+  });
+}
+
+function render_ics_legend() {
+  let legend = document.getElementById("ics_legend");
+  if (!legend) { return; }
+
+  legend.innerHTML = "";
+  if (NEATOCAL_PARAM.ics_imports.length === 0) { return; }
+
+  for (let i = 0; i < NEATOCAL_PARAM.ics_imports.length; i++) {
+    let item = NEATOCAL_PARAM.ics_imports[i];
+
+    let row = H.div();
+    row.classList.add("ics-legend-row");
+
+    let swatch = H.span();
+    swatch.classList.add("ics-legend-swatch");
+    swatch.style.background = item.color;
+    if (item.text_color) {
+      swatch.style.borderColor = item.text_color;
+    }
+    swatch.dataset.id = item.id.toString();
+
+    swatch.addEventListener("click", function(e) {
+      e.stopPropagation();
+      let id = parseInt(e.target.dataset.id, 10);
+      if (isNaN(id)) { return; }
+
+      let palette = H.div();
+      palette.classList.add("ics-legend-palette");
+
+      for (let p = 0; p < ICS_PALETTE.length; p++) {
+        let opt = H.span();
+        opt.classList.add("ics-legend-palette-item");
+        opt.style.background = ICS_PALETTE[p].bg;
+        opt.style.color = ICS_PALETTE[p].fg;
+        opt.dataset.id = id.toString();
+        opt.dataset.bg = ICS_PALETTE[p].bg;
+        opt.dataset.fg = ICS_PALETTE[p].fg;
+        opt.addEventListener("click", function(ev) {
+          ev.stopPropagation();
+          let _id = parseInt(ev.target.dataset.id, 10);
+          if (isNaN(_id)) { return; }
+          ics_update_style(_id, ev.target.dataset.bg, ev.target.dataset.fg);
+        });
+        palette.appendChild(opt);
+      }
+
+      palette.addEventListener("click", function(ev) {
+        ev.stopPropagation();
+      });
+
+      function close_palette() {
+        window.removeEventListener("click", close_palette);
+        render_ics_legend();
+      }
+
+      window.addEventListener("click", close_palette);
+      swatch.replaceWith(palette);
+    });
+
+    let name = H.span();
+    name.classList.add("ics-legend-name");
+    name.textContent = item.name;
+    name.dataset.idx = i.toString();
+
+    name.addEventListener("click", function(e) {
+      let idx = parseInt(e.target.dataset.idx, 10);
+      if (isNaN(idx)) { return; }
+
+      let input = document.createElement("input");
+      input.type = "text";
+      input.value = NEATOCAL_PARAM.ics_imports[idx].name;
+      input.classList.add("ics-legend-input");
+
+      function commit() {
+        let val = input.value.trim();
+        if (val) {
+          NEATOCAL_PARAM.ics_imports[idx].name = val;
+        }
+        render_ics_legend();
+      }
+
+      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", function(ev) {
+        if (ev.key === "Enter") { commit(); }
+        if (ev.key === "Escape") { render_ics_legend(); }
+      });
+
+      name.replaceWith(input);
+      input.focus();
+      input.select();
+    });
+
+    row.appendChild(swatch);
+    row.appendChild(name);
+    legend.appendChild(row);
+  }
+}
+function neatocal_setup_ics_drop() {
+  let overlay = document.getElementById("ics_drop_overlay");
+  let input = document.getElementById("ics_file_input");
+
+  if (!overlay || !input) { return; }
+
+  let drag_counter = 0;
+
+  function show() {
+    overlay.classList.add("visible");
+  }
+
+  function hide() {
+    overlay.classList.remove("visible");
+  }
+
+  window.addEventListener("dragenter", function(e) {
+    e.preventDefault();
+    drag_counter += 1;
+    show();
+  });
+
+  window.addEventListener("dragover", function(e) {
+    e.preventDefault();
+  });
+
+  window.addEventListener("dragleave", function(e) {
+    e.preventDefault();
+    drag_counter -= 1;
+    if (drag_counter <= 0) {
+      drag_counter = 0;
+      hide();
+    }
+  });
+
+  window.addEventListener("drop", function(e) {
+    e.preventDefault();
+    drag_counter = 0;
+    hide();
+    if (e.dataTransfer && e.dataTransfer.files) {
+      ics_handle_files(e.dataTransfer.files);
+    }
+  });
+
+  overlay.addEventListener("click", function() {
+    input.click();
+  });
+
+  input.addEventListener("change", function() {
+    if (input.files) {
+      ics_handle_files(input.files);
+      input.value = "";
+    }
+  });
 }
 
 function neatocal_init() {
@@ -1045,6 +1518,7 @@ function neatocal_init() {
   // JSON data file
   //
   let datafn_param = sp.get("data");
+  neatocal_setup_ics_drop();
 
   //---
 
@@ -1301,6 +1775,9 @@ function neatocal_init() {
 
   // no data file, just render
   //
+  if (!NEATOCAL_PARAM.data || !NEATOCAL_PARAM.data.__base) {
+    data_set_base({});
+  }
   neatocal_render();
 }
 
@@ -1350,6 +1827,8 @@ function neatocal_render() {
   }
 
   //---
+  let ui_tbody = document.getElementById("ui_tbody");
+  ui_tbody.innerHTML = "";
 
   if (layout == "aligned-weekdays") {
     neatocal_aligned_weekdays();

@@ -142,6 +142,16 @@ Moon phase parameters (`show_moon_phase`, `moon_phase_style`, `moon_phase_positi
 
 If the file is not present or isn't able to be parsed, the render will continue as the data file isn't present.
 
+ICS Import (Drag-and-drop)
+---
+
+You can drop one or more `.ics` calendar files onto the page to import events on the fly.
+Imported events are displayed in each day cell, and multi-day events render as a new entry each day
+
+Notes:
+- Recurrence rules (`RRULE`) are currently ignored.
+- All-day and timed events are supported; all-day events use the end date as exclusive.
+
 
 Misc
 ---

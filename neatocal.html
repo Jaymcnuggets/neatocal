@@ -87,8 +87,11 @@ SOFTWARE.
 
 
 
-  <div id='ui_year' style='width:100%;'>
-      <span style='display:inline-block; width:100%; justify-content:center; text-align:center; margin: 0 0 .5em 0;'>YYYY</span>
+  <div id="ui_header">
+    <div id='ui_year'>
+        <span>YYYY</span>
+    </div>
+    <div id="ics_legend" class="ics-legend"></div>
   </div>
 
   <table id='ui_table'>
@@ -113,6 +116,14 @@ SOFTWARE.
     </tbody>
 
   </table>
+
+  <div id="ics_drop_overlay" class="ics-drop-overlay">
+    <div class="ics-drop-box">
+      <div class="ics-drop-title">Drop .ics files to import</div>
+      <div class="ics-drop-subtitle">Click to choose files</div>
+      <input id="ics_file_input" type="file" accept=".ics,text/calendar" multiple>
+    </div>
+  </div>
 
 </body>
 

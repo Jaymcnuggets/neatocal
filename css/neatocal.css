@@ -31,6 +31,12 @@ SOFTWARE.
   #ui_info {
     display: none;
   }
+  .ics-drop-overlay {
+    display: none;
+  }
+  .ics-legend {
+    display: none;
+  }
 }
 
 html {
@@ -43,9 +49,22 @@ html, body {
   padding: 0;
 }
 
+#ui_header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2em;
+  padding: 0 1em 0.4em;
+  flex: 0 0 auto;
+}
+
+#ui_year {
+  width: 100%;
+}
+
 table {
   width: 100%;
-  height: calc(100% - 2.5em);
+  height: calc(100% - 4em);
   border-collapse: separate;
   border-spacing: .5em 0;
 }
@@ -154,3 +173,133 @@ p {
   display: block;
 }
 
+.event {
+  font-size: .7vmin;
+  line-height: 1.2;
+  margin-top: 0.2em;
+  padding: 0.05em 0.3em;
+  background: #dfe7f7;
+  color: #222;
+  border-radius: 0.3em;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.event-span {
+  border-radius: 0;
+  margin-left: -0.1em;
+  margin-right: -0.1em;
+}
+
+.event-span-start {
+  border-top-left-radius: 0.3em;
+  border-bottom-left-radius: 0.3em;
+}
+
+.event-span-end {
+  border-top-right-radius: 0.3em;
+  border-bottom-right-radius: 0.3em;
+}
+
+.ics-drop-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 20, 20, 0.6);
+  z-index: 9999;
+}
+
+.ics-drop-overlay.visible {
+  display: flex;
+}
+
+.ics-drop-box {
+  background: #f7f2e8;
+  border: 2px dashed #a68a64;
+  padding: 2em 3em;
+  text-align: center;
+  color: #3d3326;
+  border-radius: 0.5em;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.ics-drop-title {
+  font-size: 2vmax;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ics-drop-subtitle {
+  margin-top: 0.6em;
+  font-size: 1.2vmax;
+  text-transform: none;
+}
+
+#ics_file_input {
+  display: none;
+}
+
+.ics-legend {
+  color: #3d3326;
+  width: 100%;
+  font-size: 0.9vmin;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6em 1em;
+}
+
+.ics-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.ics-legend-row:last-child {
+  margin-bottom: 0;
+}
+
+.ics-legend-swatch {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border-radius: 0.2em;
+  cursor: pointer;
+}
+
+.ics-legend-name {
+  cursor: pointer;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ics-legend-input {
+  width: 100%;
+  font-size: inherit;
+  font-family: inherit;
+  border: 1px solid #a68a64;
+  border-radius: 0.2em;
+  padding: 0.2em 0.4em;
+  color: inherit;
+  background: #fffaf0;
+}
+
+.ics-legend-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  max-width: 12em;
+}
+
+.ics-legend-palette-item {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border-radius: 0.2em;
+  cursor: pointer;
+}
