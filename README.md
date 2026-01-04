@@ -43,6 +43,7 @@ Parameters
 | `moon_phase_display` | When to show moon phases: `changes` (default, only on phase transitions) or `all` (every day). | [...?show_moon_phase=true&moon_phase_display=all](https://abetusk.github.io/neatocal?show_moon_phase=true&moon_phase_display=all) |
 | `show_week_numbers` | Displays the week number. (default `false`) | [...?show_week_numbers=true](https://abetusk.github.io/neatocal?show_week_numbers=true) |
 | `data` | Location of JSON data file. | [...?data=example/data.json](https://abetusk.github.io/neatocal?data=example/data.json) |
+| `ics` | Show the ICS drag-and-drop prompt overlay on load. | [...?ics](https://abetusk.github.io/neatocal?ics) |
 | `help` | Show help screen  | [...?help](https://abetusk.github.io/neatocal?help) |
 
 ### Detailed Styling

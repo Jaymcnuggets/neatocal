@@ -33,6 +33,7 @@ var NEATOCAL_PARAM = {
   "data": { },
   "ics_import_count": 0,
   "ics_imports": [],
+  "ics": false,
 
   "color_cell": [],
 
@@ -1465,6 +1466,10 @@ function neatocal_setup_ics_drop() {
       input.value = "";
     }
   });
+
+  if (NEATOCAL_PARAM.ics) {
+    show();
+  }
 }
 
 function neatocal_init() {
@@ -1488,6 +1493,7 @@ function neatocal_init() {
   let month_format_param = sp.get("month_format");
   let language_param = sp.get("language");
   let show_week_numbers_param = sp.get("show_week_numbers");
+  let ics_param = sp.get("ics");
 
   let weekend_days_param = sp.get("weekend_days");
 
@@ -1518,7 +1524,6 @@ function neatocal_init() {
   // JSON data file
   //
   let datafn_param = sp.get("data");
-  neatocal_setup_ics_drop();
 
   //---
 
@@ -1713,6 +1718,13 @@ function neatocal_init() {
       (typeof show_week_numbers_param !== "undefined")) {
     NEATOCAL_PARAM.show_week_numbers = (show_week_numbers_param === "true");
   }
+
+  if ((ics_param != null) &&
+      (typeof ics_param !== "undefined")) {
+    NEATOCAL_PARAM.ics = !(ics_param === "false" || ics_param === "0");
+  }
+
+  neatocal_setup_ics_drop();
 
   //---
 
