@@ -169,6 +169,213 @@ var NEATOCAL_PARAM = {
 
 };
 
+// -----------------------------
+// Todos + settings (localStorage)
+// -----------------------------
+
+var NEATOCAL_TODO = {
+  storage_key: "neatocal.todos.v1",
+  settings_key: "neatocal.settings.v1",
+  schema_version: 1,
+  state: null,
+  cache: {
+    byDate: {},
+    statsByDate: {},
+    overall: { done: 0, total: 0, percent: 0, asOf: "" }
+  }
+};
+
+function dbg_log(funcName) {
+  // Usage: dbg_log("todoLoad")("msg", obj)
+  return function() {
+    let args = Array.from(arguments);
+    args.unshift("[DEBUG::NeatoCal::" + funcName + "]");
+    console.log.apply(console, args);
+  };
+}
+
+function safe_json_parse(raw, fallback) {
+  try { return JSON.parse(raw); } catch (e) { return fallback; }
+}
+
+function ls_get_json(key, fallback) {
+  try {
+    let raw = window.localStorage.getItem(key);
+    if (!raw) { return fallback; }
+    return safe_json_parse(raw, fallback);
+  } catch (e) {
+    dbg_log("localStorageGet")("error", key, e);
+    return fallback;
+  }
+}
+
+function ls_set_json(key, val) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(val));
+    return true;
+  } catch (e) {
+    dbg_log("localStorageSet")("error", key, e);
+    return false;
+  }
+}
+
+function gen_id(prefix) {
+  let p = prefix || "id";
+  return p + "_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+}
+
+function date_to_yyyy_mm_dd(dt) {
+  return fmt_date(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+}
+
+function clamp_date_to_day(dt) {
+  return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+function parse_yyyy_mm_dd(s) {
+  if (!s || typeof s !== "string") { return null; }
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) { return null; }
+  let y = parseInt(m[1], 10);
+  let mo = parseInt(m[2], 10) - 1;
+  let d = parseInt(m[3], 10);
+  let dt = new Date(y, mo, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo || dt.getDate() !== d) { return null; }
+  return dt;
+}
+
+function is_valid_yyyy_mm_dd(s) {
+  return parse_yyyy_mm_dd(s) !== null;
+}
+
+function min_date(a, b) {
+  return (a.getTime() <= b.getTime()) ? a : b;
+}
+
+function max_date(a, b) {
+  return (a.getTime() >= b.getTime()) ? a : b;
+}
+
+function add_days(dt, n) {
+  let d = new Date(dt.getTime());
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function days_in_month(year, month0) {
+  return new Date(year, month0 + 1, 0).getDate();
+}
+
+function apply_neatocal_param_from_object(obj) {
+  // Apply a whitelist of settings; used by settings modal + load-on-startup
+  let allowed = new Set([
+    "year", "layout", "start_day", "start_month", "n_month",
+    "weekday_code", "weekday_format", "month_code", "month_format",
+    "weekend_days", "language",
+    "show_moon_phase", "moon_phase_style", "moon_phase_position", "moon_phase_display",
+    "cell_height", "highlight_color", "today_highlight_color",
+    "show_week_numbers",
+    "year_font_size", "year_font_weight", "year_foreground_color", "year_background_color",
+    "month_font_size", "month_font_weight", "month_foreground_color", "month_background_color",
+    "weekday_font_size", "weekday_font_weight", "weekday_foreground_color", "weekday_background_color",
+    "weekend_font_size", "weekend_font_weight", "weekend_foreground_color", "weekend_background_color",
+    "week_font_size", "week_font_weight", "week_foreground_color", "week_background_color",
+    "date_font_size", "date_font_weight", "date_foreground_color", "date_background_color",
+    "weekend_date_font_size", "weekend_date_font_weight", "weekend_date_foreground_color", "weekend_date_background_color"
+  ]);
+
+  if (!obj || typeof obj !== "object") { return; }
+  Object.keys(obj).forEach((k) => {
+    if (!allowed.has(k)) { return; }
+    NEATOCAL_PARAM[k] = obj[k];
+  });
+}
+
+function neatocal_settings_load() {
+  let log = dbg_log("settingsLoad");
+  let settings = ls_get_json(NEATOCAL_TODO.settings_key, null);
+  if (!settings || typeof settings !== "object") {
+    log("no settings found");
+    return;
+  }
+  log("loaded keys", Object.keys(settings));
+  apply_neatocal_param_from_object(settings);
+}
+
+function neatocal_settings_save() {
+  let log = dbg_log("settingsSave");
+  // Only persist the whitelisted settings by reusing the same whitelist logic
+  let out = {};
+  // Explicitly pick from the whitelist used above (to avoid persisting data/data_fn/etc.)
+  let allowedKeys = [
+    "year", "layout", "start_day", "start_month", "n_month",
+    "weekday_code", "weekday_format", "month_code", "month_format",
+    "weekend_days", "language",
+    "show_moon_phase", "moon_phase_style", "moon_phase_position", "moon_phase_display",
+    "cell_height", "highlight_color", "today_highlight_color",
+    "show_week_numbers",
+    "year_font_size", "year_font_weight", "year_foreground_color", "year_background_color",
+    "month_font_size", "month_font_weight", "month_foreground_color", "month_background_color",
+    "weekday_font_size", "weekday_font_weight", "weekday_foreground_color", "weekday_background_color",
+    "weekend_font_size", "weekend_font_weight", "weekend_foreground_color", "weekend_background_color",
+    "week_font_size", "week_font_weight", "week_foreground_color", "week_background_color",
+    "date_font_size", "date_font_weight", "date_foreground_color", "date_background_color",
+    "weekend_date_font_size", "weekend_date_font_weight", "weekend_date_foreground_color", "weekend_date_background_color"
+  ];
+  for (let i = 0; i < allowedKeys.length; i++) {
+    let k = allowedKeys[i];
+    if (typeof NEATOCAL_PARAM[k] !== "undefined") {
+      out[k] = NEATOCAL_PARAM[k];
+    }
+  }
+  out.schemaVersion = 1;
+  let ok = ls_set_json(NEATOCAL_TODO.settings_key, out);
+  log("saved", ok, "keys", Object.keys(out));
+  return ok;
+}
+
+function neatocal_todo_default_state() {
+  return {
+    schemaVersion: NEATOCAL_TODO.schema_version,
+    oneOffByDate: {},
+    seriesById: {},
+    instanceState: {},
+    seriesExceptions: {}
+  };
+}
+
+function neatocal_todo_load() {
+  let log = dbg_log("todoLoad");
+  let state = ls_get_json(NEATOCAL_TODO.storage_key, null);
+  if (!state || typeof state !== "object") {
+    log("no state found; creating default");
+    state = neatocal_todo_default_state();
+    ls_set_json(NEATOCAL_TODO.storage_key, state);
+  }
+  if (state.schemaVersion !== NEATOCAL_TODO.schema_version) {
+    log("schema mismatch", state.schemaVersion, "expected", NEATOCAL_TODO.schema_version, "resetting");
+    state = neatocal_todo_default_state();
+    ls_set_json(NEATOCAL_TODO.storage_key, state);
+  }
+  NEATOCAL_TODO.state = state;
+  log("loaded", {
+    oneOffDates: Object.keys(state.oneOffByDate || {}).length,
+    series: Object.keys(state.seriesById || {}).length,
+    instanceState: Object.keys(state.instanceState || {}).length
+  });
+  return state;
+}
+
+function neatocal_todo_save() {
+  let log = dbg_log("todoSave");
+  if (!NEATOCAL_TODO.state) {
+    NEATOCAL_TODO.state = neatocal_todo_default_state();
+  }
+  let ok = ls_set_json(NEATOCAL_TODO.storage_key, NEATOCAL_TODO.state);
+  log("saved", ok);
+  return ok;
+}
+
 var ICS_PALETTE = [
   { "bg": "#cfe8ff", "fg": "#000000" },
   { "bg": "#1e4f8a", "fg": "#ffffff" },
@@ -319,6 +526,68 @@ function render_cell_data(td, yyyy_mm_dd) {
   }
 }
 
+function render_todo_cell_data(td, yyyy_mm_dd) {
+  if (!NEATOCAL_TODO || !NEATOCAL_TODO.cache || !NEATOCAL_TODO.cache.byDate) { return; }
+  let items = NEATOCAL_TODO.cache.byDate[yyyy_mm_dd];
+  if (!items || items.length === 0) { return; }
+
+  // Compact render inside cell: show up to 2, plus summary badge
+  let stats = NEATOCAL_TODO.cache.statsByDate[yyyy_mm_dd] || { done: 0, total: items.length };
+
+  let container = H.div();
+  container.classList.add("todo-container");
+
+  let badge = H.div();
+  badge.classList.add("todo-badge");
+  badge.textContent = stats.done.toString() + "/" + stats.total.toString();
+  container.appendChild(badge);
+
+  let max_show = 2;
+  for (let i = 0; i < items.length && i < max_show; i++) {
+    let it = items[i];
+    let row = H.div();
+    row.classList.add("todo-item");
+    if (it.completed) { row.classList.add("todo-completed"); }
+
+    let cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.classList.add("todo-checkbox");
+    cb.checked = !!it.completed;
+    cb.dataset.date = yyyy_mm_dd;
+    cb.dataset.kind = it.kind;
+    if (it.kind === "oneoff") {
+      cb.dataset.id = it.id;
+    } else if (it.kind === "series") {
+      cb.dataset.seriesId = it.seriesId;
+      cb.dataset.instanceKey = it.instanceKey;
+    }
+
+    let label = H.span("", "todo-title");
+    label.textContent = it.title || "";
+    label.dataset.date = yyyy_mm_dd;
+    label.dataset.kind = it.kind;
+    if (it.kind === "oneoff") {
+      label.dataset.id = it.id;
+    } else {
+      label.dataset.seriesId = it.seriesId;
+      label.dataset.instanceKey = it.instanceKey;
+    }
+
+    row.appendChild(cb);
+    row.appendChild(label);
+    container.appendChild(row);
+  }
+
+  if (items.length > max_show) {
+    let more = H.div();
+    more.classList.add("todo-more");
+    more.textContent = "+" + (items.length - max_show).toString() + " more";
+    container.appendChild(more);
+  }
+
+  td.appendChild(container);
+}
+
 function add_event_to_date(yyyy_mm_dd, event) {
   if (!(yyyy_mm_dd in NEATOCAL_PARAM.data)) {
     NEATOCAL_PARAM.data[yyyy_mm_dd] = [];
@@ -332,6 +601,264 @@ function get_view_range() {
   let start = new Date(NEATOCAL_PARAM.year, NEATOCAL_PARAM.start_month, 1);
   let end = new Date(NEATOCAL_PARAM.year, NEATOCAL_PARAM.start_month + NEATOCAL_PARAM.n_month, 1);
   return { start: start, end: end };
+}
+
+function neatocal_todo_ensure_loaded() {
+  if (!NEATOCAL_TODO.state) {
+    neatocal_todo_load();
+  }
+}
+
+function neatocal_todo_get_series_ex(seriesId) {
+  if (!NEATOCAL_TODO.state.seriesExceptions) { NEATOCAL_TODO.state.seriesExceptions = {}; }
+  if (!(seriesId in NEATOCAL_TODO.state.seriesExceptions)) {
+    NEATOCAL_TODO.state.seriesExceptions[seriesId] = { skipDates: [] };
+  }
+  let ex = NEATOCAL_TODO.state.seriesExceptions[seriesId];
+  if (!Array.isArray(ex.skipDates)) { ex.skipDates = []; }
+  return ex;
+}
+
+function neatocal_todo_is_skipped(seriesId, dateStr) {
+  let ex = NEATOCAL_TODO.state.seriesExceptions && NEATOCAL_TODO.state.seriesExceptions[seriesId];
+  if (!ex) { return false; }
+  if (ex.terminatedAfterDate && is_valid_yyyy_mm_dd(ex.terminatedAfterDate)) {
+    if (dateStr > ex.terminatedAfterDate) { return true; }
+  }
+  if (Array.isArray(ex.skipDates) && ex.skipDates.indexOf(dateStr) >= 0) { return true; }
+  return false;
+}
+
+function neatocal_todo_instance_state(seriesId, dateStr) {
+  if (!NEATOCAL_TODO.state.instanceState) { NEATOCAL_TODO.state.instanceState = {}; }
+  let k = seriesId + "|" + dateStr;
+  return NEATOCAL_TODO.state.instanceState[k] || null;
+}
+
+function neatocal_todo_expand_series_into_view(series, viewStart, viewEnd) {
+  let log = dbg_log("recurExpand");
+  let out = [];
+  if (!series || !series.rule || !series.startDate) { return out; }
+  if (!is_valid_yyyy_mm_dd(series.startDate)) { return out; }
+
+  let startDt = parse_yyyy_mm_dd(series.startDate);
+  let rule = series.rule || {};
+  let freq = rule.freq || "daily";
+  let interval = parseInt(rule.interval || 1, 10);
+  if (isNaN(interval) || interval < 1) { interval = 1; }
+
+  // End handling
+  let end = series.end || { type: "never" };
+  let endType = end.type || "never";
+  let untilDate = (endType === "until" && end.untilDate && is_valid_yyyy_mm_dd(end.untilDate)) ? end.untilDate : null;
+  let maxCount = (endType === "count") ? parseInt(end.count || 0, 10) : null;
+  if (endType === "count" && (isNaN(maxCount) || maxCount < 1)) { maxCount = 1; }
+
+  // We generate sequentially and count occurrences even if outside viewStart,
+  // so count-based series remain accurate.
+  let occCount = 0;
+
+  function include_date(dt) {
+    let ds = date_to_yyyy_mm_dd(dt);
+    if (untilDate && ds > untilDate) { return false; }
+    if (endType === "count" && occCount >= maxCount) { return false; }
+    if (neatocal_todo_is_skipped(series.id, ds)) { return true; } // counts still advance for skipped? Google-style skips still counts as occurrence? We'll count it as occurrence for end=count.
+    return true;
+  }
+
+  function maybe_add(dt) {
+    let ds = date_to_yyyy_mm_dd(dt);
+    if (untilDate && ds > untilDate) { return false; }
+    if (endType === "count" && occCount >= maxCount) { return false; }
+
+    // Advance count for each logical occurrence (even if skipped)
+    occCount += 1;
+
+    if (neatocal_todo_is_skipped(series.id, ds)) { return true; }
+    if (dt >= viewStart && dt < viewEnd) {
+      out.push(ds);
+    }
+    return true;
+  }
+
+  if (freq === "daily") {
+    let dt = clamp_date_to_day(startDt);
+    while (dt < viewEnd) {
+      if (!maybe_add(dt)) { break; }
+      dt = add_days(dt, interval);
+      if (untilDate && date_to_yyyy_mm_dd(dt) > untilDate) { break; }
+      if (endType === "count" && occCount >= maxCount) { break; }
+    }
+  }
+
+  else if (freq === "weekly") {
+    let byWeekday = Array.isArray(rule.byWeekday) ? rule.byWeekday.slice() : [];
+    if (byWeekday.length === 0) {
+      byWeekday = [startDt.getDay()];
+    }
+    byWeekday = byWeekday.map(x => parseInt(x, 10)).filter(x => !isNaN(x) && x >= 0 && x <= 6);
+    byWeekday.sort((a,b) => a-b);
+
+    let startWeekStart = add_days(clamp_date_to_day(startDt), -startDt.getDay()); // Sunday start
+    let weekIndex = 0;
+    while (true) {
+      let weekStart = add_days(startWeekStart, 7 * interval * weekIndex);
+      if (weekStart >= viewEnd) { break; }
+      for (let i = 0; i < byWeekday.length; i++) {
+        let dt = add_days(weekStart, byWeekday[i]);
+        if (dt < clamp_date_to_day(startDt)) { continue; }
+        if (dt >= viewEnd) { continue; }
+        if (!maybe_add(dt)) { weekIndex = 1e9; break; }
+      }
+      if (endType === "count" && occCount >= maxCount) { break; }
+      if (untilDate && date_to_yyyy_mm_dd(weekStart) > untilDate) { break; }
+      weekIndex += 1;
+    }
+  }
+
+  else if (freq === "monthly") {
+    let startY = startDt.getFullYear();
+    let startM = startDt.getMonth();
+    let dom = startDt.getDate();
+    let moIndex = 0;
+    while (true) {
+      let m = startM + moIndex * interval;
+      let y = startY + Math.floor(m / 12);
+      let mm = ((m % 12) + 12) % 12;
+      let dim = days_in_month(y, mm);
+      let d = Math.min(dom, dim);
+      let dt = new Date(y, mm, d);
+      if (dt >= viewEnd) { break; }
+      if (dt >= clamp_date_to_day(startDt)) {
+        if (!maybe_add(dt)) { break; }
+      }
+      if (endType === "count" && occCount >= maxCount) { break; }
+      if (untilDate && date_to_yyyy_mm_dd(dt) > untilDate) { break; }
+      moIndex += 1;
+    }
+  }
+
+  else if (freq === "yearly") {
+    let startY = startDt.getFullYear();
+    let mo = startDt.getMonth();
+    let dom = startDt.getDate();
+    let yIndex = 0;
+    while (true) {
+      let y = startY + yIndex * interval;
+      let dim = days_in_month(y, mo);
+      let d = Math.min(dom, dim);
+      let dt = new Date(y, mo, d);
+      if (dt >= viewEnd) { break; }
+      if (dt >= clamp_date_to_day(startDt)) {
+        if (!maybe_add(dt)) { break; }
+      }
+      if (endType === "count" && occCount >= maxCount) { break; }
+      if (untilDate && date_to_yyyy_mm_dd(dt) > untilDate) { break; }
+      yIndex += 1;
+    }
+  }
+
+  log(series.id, freq, "interval", interval, "occTotal", occCount, "inView", out.length);
+  return out;
+}
+
+function neatocal_todo_recompute_cache() {
+  let log = dbg_log("todoCache");
+  neatocal_todo_ensure_loaded();
+  let view = get_view_range();
+  let viewStart = clamp_date_to_day(view.start);
+  let viewEnd = clamp_date_to_day(view.end);
+
+  let state = NEATOCAL_TODO.state;
+  let byDate = {};
+  let statsByDate = {};
+
+  // One-offs
+  if (state.oneOffByDate && typeof state.oneOffByDate === "object") {
+    Object.keys(state.oneOffByDate).forEach((dateStr) => {
+      if (!is_valid_yyyy_mm_dd(dateStr)) { return; }
+      let dt = parse_yyyy_mm_dd(dateStr);
+      if (dt < viewStart || dt >= viewEnd) { return; }
+      let arr = state.oneOffByDate[dateStr];
+      if (!Array.isArray(arr)) { return; }
+      if (!(dateStr in byDate)) { byDate[dateStr] = []; }
+      for (let i = 0; i < arr.length; i++) {
+        let item = arr[i];
+        if (!item || typeof item !== "object") { continue; }
+        byDate[dateStr].push({
+          kind: "oneoff",
+          id: item.id,
+          title: item.title || "",
+          notes: item.notes || "",
+          completed: !!item.completed,
+          date: dateStr
+        });
+      }
+    });
+  }
+
+  // Series occurrences
+  if (state.seriesById && typeof state.seriesById === "object") {
+    Object.keys(state.seriesById).forEach((sid) => {
+      let series = state.seriesById[sid];
+      if (!series || typeof series !== "object") { return; }
+      series.id = series.id || sid;
+      let dates = neatocal_todo_expand_series_into_view(series, viewStart, viewEnd);
+      for (let i = 0; i < dates.length; i++) {
+        let dateStr = dates[i];
+        if (!(dateStr in byDate)) { byDate[dateStr] = []; }
+        let inst = neatocal_todo_instance_state(series.id, dateStr) || {};
+        let completed = (typeof inst.completed === "boolean") ? inst.completed : false;
+        let title = (typeof inst.overrideTitle === "string") ? inst.overrideTitle : (series.title || "");
+        let notes = (typeof inst.overrideNotes === "string") ? inst.overrideNotes : (series.notes || "");
+        byDate[dateStr].push({
+          kind: "series",
+          seriesId: series.id,
+          instanceKey: series.id + "|" + dateStr,
+          title: title,
+          notes: notes,
+          completed: completed,
+          date: dateStr
+        });
+      }
+    });
+  }
+
+  // Stats
+  Object.keys(byDate).forEach((dateStr) => {
+    let done = 0;
+    let total = byDate[dateStr].length;
+    for (let i = 0; i < byDate[dateStr].length; i++) {
+      if (byDate[dateStr][i].completed) { done += 1; }
+    }
+    statsByDate[dateStr] = { done: done, total: total };
+  });
+
+  // Overall progress up to today (but within view range)
+  let today = clamp_date_to_day(new Date());
+  let asOf = min_date(today, add_days(viewEnd, -1));
+  let asOfStr = date_to_yyyy_mm_dd(asOf);
+
+  let doneAll = 0;
+  let totalAll = 0;
+  Object.keys(byDate).forEach((dateStr) => {
+    if (dateStr > asOfStr) { return; }
+    let s = statsByDate[dateStr];
+    totalAll += s.total;
+    doneAll += s.done;
+  });
+  let percent = (totalAll > 0) ? Math.round((doneAll / totalAll) * 100) : 0;
+
+  NEATOCAL_TODO.cache = {
+    byDate: byDate,
+    statsByDate: statsByDate,
+    overall: { done: doneAll, total: totalAll, percent: percent, asOf: asOfStr }
+  };
+
+  log("recomputed", {
+    dates: Object.keys(byDate).length,
+    overall: NEATOCAL_TODO.cache.overall
+  });
 }
 
 
@@ -634,6 +1161,7 @@ function neatocal_hallon_almanackan() {
 
         let yyyy_mm_dd = fmt_date(cur_year, cur_mo+1, idx+1);
         render_cell_data(td, yyyy_mm_dd);
+        render_todo_cell_data(td, yyyy_mm_dd);
 
         // Add moon phase if enabled
         //
@@ -732,6 +1260,7 @@ function neatocal_default() {
 
         let yyyy_mm_dd = fmt_date(cur_year, cur_mo+1, idx+1);
         render_cell_data(td, yyyy_mm_dd);
+        render_todo_cell_data(td, yyyy_mm_dd);
 
         // Add moon phase if enabled
         //
@@ -898,6 +1427,7 @@ function neatocal_aligned_weekdays() {
 
         let yyyy_mm_dd = fmt_date(cur_year, cur_mo+1, day_idx+1);
         render_cell_data(td, yyyy_mm_dd);
+        render_todo_cell_data(td, yyyy_mm_dd);
 
         // Add moon phase if enabled
         //
@@ -939,6 +1469,837 @@ function neatocal_post_process() {
       ele.style.background = color_cell[i].color;
     }
   }
+}
+
+function neatocal_update_header_progress() {
+  let log = dbg_log("progressHeader");
+  let ele = document.getElementById("ui_progress");
+  if (!ele) { return; }
+  if (!NEATOCAL_TODO || !NEATOCAL_TODO.cache || !NEATOCAL_TODO.cache.overall) {
+    ele.textContent = "";
+    return;
+  }
+  let o = NEATOCAL_TODO.cache.overall;
+  if (!o.total || o.total <= 0) {
+    ele.textContent = "Progress: —";
+    log("empty");
+    return;
+  }
+  ele.textContent = "Progress: " + o.done.toString() + "/" + o.total.toString() + " (" + o.percent.toString() + "%) as of " + o.asOf;
+  log("updated", o);
+}
+
+// -----------------------------
+// Todo mutations
+// -----------------------------
+
+function neatocal_todo_get_oneoff_list(dateStr) {
+  let state = NEATOCAL_TODO.state;
+  if (!state.oneOffByDate || typeof state.oneOffByDate !== "object") {
+    state.oneOffByDate = {};
+  }
+  if (!(dateStr in state.oneOffByDate)) {
+    state.oneOffByDate[dateStr] = [];
+  }
+  if (!Array.isArray(state.oneOffByDate[dateStr])) {
+    state.oneOffByDate[dateStr] = [];
+  }
+  return state.oneOffByDate[dateStr];
+}
+
+function neatocal_todo_add_oneoff(dateStr, title, notes) {
+  let log = dbg_log("todoAddOneoff");
+  neatocal_todo_ensure_loaded();
+  if (!is_valid_yyyy_mm_dd(dateStr)) { return null; }
+  let t = (title || "").trim();
+  if (!t) { return null; }
+  let now = new Date().toISOString();
+  let item = {
+    id: gen_id("todo"),
+    title: t,
+    notes: (notes || "").trim(),
+    completed: false,
+    createdAt: now,
+    updatedAt: now
+  };
+  neatocal_todo_get_oneoff_list(dateStr).push(item);
+  log(dateStr, item.id, item.title);
+  neatocal_todo_save();
+  return item;
+}
+
+function neatocal_todo_toggle_oneoff(dateStr, id, completed) {
+  let log = dbg_log("todoToggleOneoff");
+  neatocal_todo_ensure_loaded();
+  let list = neatocal_todo_get_oneoff_list(dateStr);
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] && list[i].id === id) {
+      list[i].completed = !!completed;
+      list[i].updatedAt = new Date().toISOString();
+      log(dateStr, id, list[i].completed);
+      neatocal_todo_save();
+      return true;
+    }
+  }
+  return false;
+}
+
+function neatocal_todo_update_oneoff_title(dateStr, id, title) {
+  let log = dbg_log("todoEditOneoff");
+  neatocal_todo_ensure_loaded();
+  let t = (title || "").trim();
+  if (!t) { return false; }
+  let list = neatocal_todo_get_oneoff_list(dateStr);
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] && list[i].id === id) {
+      list[i].title = t;
+      list[i].updatedAt = new Date().toISOString();
+      log(dateStr, id, t);
+      neatocal_todo_save();
+      return true;
+    }
+  }
+  return false;
+}
+
+function neatocal_todo_delete_oneoff(dateStr, id) {
+  let log = dbg_log("todoDeleteOneoff");
+  neatocal_todo_ensure_loaded();
+  let list = neatocal_todo_get_oneoff_list(dateStr);
+  let before = list.length;
+  let after = list.filter(x => x && x.id !== id);
+  NEATOCAL_TODO.state.oneOffByDate[dateStr] = after;
+  log(dateStr, id, "removed", before - after.length);
+  neatocal_todo_save();
+  return (before !== after.length);
+}
+
+function neatocal_todo_add_series(series) {
+  let log = dbg_log("todoAddSeries");
+  neatocal_todo_ensure_loaded();
+  if (!NEATOCAL_TODO.state.seriesById) { NEATOCAL_TODO.state.seriesById = {}; }
+  let sid = series.id || gen_id("series");
+  series.id = sid;
+  NEATOCAL_TODO.state.seriesById[sid] = series;
+  log("added", sid, series.rule);
+  neatocal_todo_save();
+  return sid;
+}
+
+function neatocal_todo_set_instance_state(seriesId, dateStr, patch) {
+  let log = dbg_log("todoSetInstance");
+  neatocal_todo_ensure_loaded();
+  if (!NEATOCAL_TODO.state.instanceState) { NEATOCAL_TODO.state.instanceState = {}; }
+  let k = seriesId + "|" + dateStr;
+  let cur = NEATOCAL_TODO.state.instanceState[k] || {};
+  let next = Object.assign({}, cur, patch || {});
+
+  // Compact storage: if only completed=false and no overrides, delete
+  let hasTitle = (typeof next.overrideTitle === "string" && next.overrideTitle.trim() !== "");
+  let hasNotes = (typeof next.overrideNotes === "string" && next.overrideNotes.trim() !== "");
+  let hasCompleted = (typeof next.completed === "boolean");
+
+  if (!hasTitle && !hasNotes && (!hasCompleted || next.completed === false)) {
+    delete NEATOCAL_TODO.state.instanceState[k];
+    log("cleared", k);
+  } else {
+    NEATOCAL_TODO.state.instanceState[k] = next;
+    log("set", k, next);
+  }
+  neatocal_todo_save();
+}
+
+function neatocal_prev_date_str(dateStr) {
+  let dt = parse_yyyy_mm_dd(dateStr);
+  if (!dt) { return null; }
+  return date_to_yyyy_mm_dd(add_days(dt, -1));
+}
+
+function neatocal_todo_delete_series_instance(seriesId, dateStr) {
+  let log = dbg_log("todoDeleteInstance");
+  neatocal_todo_ensure_loaded();
+  let ex = neatocal_todo_get_series_ex(seriesId);
+  if (ex.skipDates.indexOf(dateStr) < 0) {
+    ex.skipDates.push(dateStr);
+  }
+  log(seriesId, dateStr, "skipDates", ex.skipDates.length);
+  neatocal_todo_save();
+}
+
+function neatocal_todo_delete_series_following(seriesId, dateStr) {
+  let log = dbg_log("todoDeleteFollowing");
+  neatocal_todo_ensure_loaded();
+  let ex = neatocal_todo_get_series_ex(seriesId);
+  let prev = neatocal_prev_date_str(dateStr);
+  ex.terminatedAfterDate = prev;
+  log(seriesId, "terminatedAfterDate", prev);
+  neatocal_todo_save();
+}
+
+function neatocal_todo_delete_series_all(seriesId) {
+  let log = dbg_log("todoDeleteSeries");
+  neatocal_todo_ensure_loaded();
+  if (NEATOCAL_TODO.state.seriesById) {
+    delete NEATOCAL_TODO.state.seriesById[seriesId];
+  }
+  if (NEATOCAL_TODO.state.seriesExceptions) {
+    delete NEATOCAL_TODO.state.seriesExceptions[seriesId];
+  }
+  if (NEATOCAL_TODO.state.instanceState) {
+    Object.keys(NEATOCAL_TODO.state.instanceState).forEach((k) => {
+      if (k.startsWith(seriesId + "|")) { delete NEATOCAL_TODO.state.instanceState[k]; }
+    });
+  }
+  log("deleted", seriesId);
+  neatocal_todo_save();
+}
+
+function neatocal_todo_edit_series_title(seriesId, title) {
+  let log = dbg_log("todoEditSeries");
+  neatocal_todo_ensure_loaded();
+  let t = (title || "").trim();
+  if (!t) { return false; }
+  if (!NEATOCAL_TODO.state.seriesById || !NEATOCAL_TODO.state.seriesById[seriesId]) { return false; }
+  NEATOCAL_TODO.state.seriesById[seriesId].title = t;
+  NEATOCAL_TODO.state.seriesById[seriesId].updatedAt = new Date().toISOString();
+  log(seriesId, t);
+  neatocal_todo_save();
+  return true;
+}
+
+function neatocal_todo_split_series_from_date(seriesId, dateStr, newTitle) {
+  // Best-effort split; we support never/until ends cleanly.
+  let log = dbg_log("todoSplitSeries");
+  neatocal_todo_ensure_loaded();
+  let s = NEATOCAL_TODO.state.seriesById && NEATOCAL_TODO.state.seriesById[seriesId];
+  if (!s) { return null; }
+  let t = (newTitle || "").trim();
+  if (!t) { return null; }
+  if (!is_valid_yyyy_mm_dd(dateStr)) { return null; }
+
+  let endType = (s.end && s.end.type) ? s.end.type : "never";
+  if (endType === "count") {
+    // Count-based splitting is ambiguous without recomputing remaining count.
+    // For now, fall back to editing entire series.
+    log("count-based split unsupported; editing series instead", seriesId);
+    neatocal_todo_edit_series_title(seriesId, t);
+    return seriesId;
+  }
+
+  // Terminate old series before dateStr
+  neatocal_todo_delete_series_following(seriesId, dateStr);
+
+  // Create a new series starting at dateStr with same rule/end (but end.untilDate stays)
+  let now = new Date().toISOString();
+  let newSeries = JSON.parse(JSON.stringify(s));
+  newSeries.id = gen_id("series");
+  newSeries.startDate = dateStr;
+  newSeries.title = t;
+  newSeries.createdAt = now;
+  newSeries.updatedAt = now;
+  neatocal_todo_add_series(newSeries);
+  log("split", seriesId, "->", newSeries.id, "from", dateStr);
+  return newSeries.id;
+}
+
+// -----------------------------
+// UI
+// -----------------------------
+
+var NEATOCAL_UI = {
+  bound: false,
+  activeDate: null,
+  modalType: null
+};
+
+function neatocal_ui_ensure_topbar() {
+  let header = document.getElementById("ui_header");
+  if (!header) { return; }
+
+  let topbar = document.getElementById("ui_topbar");
+  if (!topbar) {
+    topbar = document.createElement("div");
+    topbar.id = "ui_topbar";
+    topbar.classList.add("nc-topbar");
+    header.insertBefore(topbar, header.firstChild);
+  }
+
+  let progress = document.getElementById("ui_progress");
+  if (!progress) {
+    progress = document.createElement("div");
+    progress.id = "ui_progress";
+    progress.classList.add("nc-progress");
+    topbar.appendChild(progress);
+  }
+
+  let btn = document.getElementById("ui_settings_btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.id = "ui_settings_btn";
+    btn.type = "button";
+    btn.classList.add("nc-gear");
+    btn.title = "Settings";
+    btn.textContent = "⚙";
+    topbar.appendChild(btn);
+  }
+}
+
+function neatocal_ui_ensure_modals() {
+  let root = document.getElementById("nc_modal_root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "nc_modal_root";
+    document.body.appendChild(root);
+  }
+
+  function ensure_modal(id) {
+    let m = document.getElementById(id);
+    if (m) { return m; }
+    m = document.createElement("div");
+    m.id = id;
+    m.classList.add("nc-modal-overlay");
+    m.innerHTML = "<div class='nc-modal' role='dialog' aria-modal='true'></div>";
+    root.appendChild(m);
+    return m;
+  }
+
+  ensure_modal("nc_day_modal");
+  ensure_modal("nc_settings_modal");
+}
+
+function neatocal_ui_close_modals() {
+  ["nc_day_modal", "nc_settings_modal"].forEach((id) => {
+    let m = document.getElementById(id);
+    if (m) { m.classList.remove("visible"); }
+  });
+  NEATOCAL_UI.modalType = null;
+}
+
+function neatocal_ui_td_to_date(td) {
+  if (!td || !td.id) { return null; }
+  if (!td.id.startsWith("ui_")) { return null; }
+  let dateStr = td.id.slice(3);
+  if (!is_valid_yyyy_mm_dd(dateStr)) { return null; }
+  // Only allow opening days within current view range
+  let view = get_view_range();
+  let dt = parse_yyyy_mm_dd(dateStr);
+  if (!dt) { return null; }
+  if (dt < clamp_date_to_day(view.start) || dt >= clamp_date_to_day(view.end)) { return null; }
+  return dateStr;
+}
+
+function neatocal_ui_find_td(target) {
+  let cur = target;
+  while (cur && cur !== document.body) {
+    if (cur.tagName && cur.tagName.toLowerCase() === "td") { return cur; }
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
+function neatocal_ui_open_day_modal(dateStr) {
+  let log = dbg_log("uiOpenDay");
+  neatocal_ui_ensure_modals();
+  let overlay = document.getElementById("nc_day_modal");
+  if (!overlay) { return; }
+  overlay.classList.add("visible");
+  NEATOCAL_UI.modalType = "day";
+  NEATOCAL_UI.activeDate = dateStr;
+  neatocal_ui_render_day_modal(dateStr);
+  log("opened", dateStr);
+}
+
+function neatocal_ui_render_day_modal(dateStr) {
+  let log = dbg_log("uiRenderDay");
+  neatocal_todo_recompute_cache();
+  neatocal_update_header_progress();
+
+  let overlay = document.getElementById("nc_day_modal");
+  if (!overlay) { return; }
+  let modal = overlay.querySelector(".nc-modal");
+  if (!modal) { return; }
+
+  let items = (NEATOCAL_TODO.cache.byDate && NEATOCAL_TODO.cache.byDate[dateStr]) ? NEATOCAL_TODO.cache.byDate[dateStr] : [];
+  let stats = (NEATOCAL_TODO.cache.statsByDate && NEATOCAL_TODO.cache.statsByDate[dateStr]) ? NEATOCAL_TODO.cache.statsByDate[dateStr] : { done: 0, total: 0 };
+  let pct = (stats.total > 0) ? Math.round((stats.done / stats.total) * 100) : 0;
+
+  modal.innerHTML = "";
+
+  let header = document.createElement("div");
+  header.classList.add("nc-modal-header");
+  header.innerHTML = "<div class='nc-modal-title'>" + dateStr + "</div>" +
+    "<div class='nc-modal-subtitle'>" + stats.done.toString() + "/" + stats.total.toString() + " (" + pct.toString() + "%)</div>";
+
+  let closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.classList.add("nc-modal-close");
+  closeBtn.textContent = "Close";
+  closeBtn.addEventListener("click", function() { neatocal_ui_close_modals(); });
+  header.appendChild(closeBtn);
+  modal.appendChild(header);
+
+  let list = document.createElement("div");
+  list.classList.add("nc-todo-list");
+
+  function render_item_row(it) {
+    let row = document.createElement("div");
+    row.classList.add("nc-todo-row");
+    if (it.completed) { row.classList.add("nc-todo-done"); }
+
+    let cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!it.completed;
+    cb.classList.add("nc-todo-cb");
+
+    cb.addEventListener("click", function(e) {
+      e.stopPropagation();
+      if (it.kind === "oneoff") {
+        neatocal_todo_toggle_oneoff(it.date, it.id, cb.checked);
+      } else {
+        neatocal_todo_set_instance_state(it.seriesId, it.date, { completed: cb.checked });
+      }
+      neatocal_render();
+      neatocal_ui_render_day_modal(dateStr);
+    });
+
+    let titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.value = it.title || "";
+    titleInput.classList.add("nc-todo-title-input");
+
+    let scopeSel = null;
+    if (it.kind === "series") {
+      scopeSel = document.createElement("select");
+      scopeSel.classList.add("nc-todo-scope");
+      scopeSel.innerHTML = "<option value='instance'>This</option><option value='following'>This+following</option><option value='series'>Series</option>";
+    }
+
+    let saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.classList.add("nc-todo-action");
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      let nextTitle = titleInput.value;
+      if (it.kind === "oneoff") {
+        neatocal_todo_update_oneoff_title(it.date, it.id, nextTitle);
+      } else {
+        let scope = scopeSel ? scopeSel.value : "series";
+        if (scope === "instance") {
+          neatocal_todo_set_instance_state(it.seriesId, it.date, { overrideTitle: nextTitle });
+        } else if (scope === "following") {
+          neatocal_todo_split_series_from_date(it.seriesId, it.date, nextTitle);
+        } else {
+          neatocal_todo_edit_series_title(it.seriesId, nextTitle);
+        }
+      }
+      neatocal_render();
+      neatocal_ui_render_day_modal(dateStr);
+    });
+
+    let delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.classList.add("nc-todo-action", "danger");
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      if (it.kind === "oneoff") {
+        neatocal_todo_delete_oneoff(it.date, it.id);
+      } else {
+        // Google-calendar-like: instance / this+following / series
+        let choice = "instance";
+        if (scopeSel) { choice = scopeSel.value; }
+        if (choice === "instance") {
+          neatocal_todo_delete_series_instance(it.seriesId, it.date);
+        } else if (choice === "following") {
+          neatocal_todo_delete_series_following(it.seriesId, it.date);
+        } else {
+          neatocal_todo_delete_series_all(it.seriesId);
+        }
+      }
+      neatocal_render();
+      neatocal_ui_render_day_modal(dateStr);
+    });
+
+    let meta = document.createElement("div");
+    meta.classList.add("nc-todo-meta");
+    meta.textContent = (it.kind === "series") ? "Recurring" : "One-off";
+
+    row.appendChild(cb);
+    row.appendChild(titleInput);
+    if (scopeSel) { row.appendChild(scopeSel); }
+    row.appendChild(saveBtn);
+    row.appendChild(delBtn);
+    row.appendChild(meta);
+    return row;
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    list.appendChild(render_item_row(items[i]));
+  }
+
+  modal.appendChild(list);
+
+  // Add form
+  let addBox = document.createElement("div");
+  addBox.classList.add("nc-add-box");
+  addBox.innerHTML =
+    "<div class='nc-add-title'>Add</div>" +
+    "<div class='nc-add-row'>" +
+    "  <input id='nc_add_title' class='nc-add-input' type='text' placeholder='Todo title' />" +
+    "  <button id='nc_add_btn' class='nc-add-btn' type='button'>Add</button>" +
+    "</div>" +
+    "<details class='nc-recurring-details'><summary>Make recurring…</summary>" +
+    "  <div class='nc-recurring-grid'>" +
+    "    <label>Frequency <select id='nc_freq'><option value='daily'>Daily</option><option value='weekly'>Weekly</option><option value='monthly'>Monthly</option><option value='yearly'>Yearly</option></select></label>" +
+    "    <label>Interval <input id='nc_interval' type='number' min='1' value='1' /></label>" +
+    "    <label id='nc_byweekday_wrap' style='display:none;'>Days <input id='nc_byweekday' type='text' placeholder='0,1,2.. (Sun=0)' /></label>" +
+    "    <label>End <select id='nc_end_type'><option value='never'>Never</option><option value='until'>Until</option><option value='count'>After N</option></select></label>" +
+    "    <label id='nc_until_wrap' style='display:none;'>Until <input id='nc_until' type='date' /></label>" +
+    "    <label id='nc_count_wrap' style='display:none;'>Count <input id='nc_count' type='number' min='1' value='10' /></label>" +
+    "  </div>" +
+    "  <button id='nc_add_series_btn' class='nc-add-btn secondary' type='button'>Add recurring</button>" +
+    "</details>";
+
+  modal.appendChild(addBox);
+
+  // bind add handlers
+  let titleInput = modal.querySelector("#nc_add_title");
+  let addBtn = modal.querySelector("#nc_add_btn");
+  if (addBtn && titleInput) {
+    addBtn.addEventListener("click", function() {
+      neatocal_todo_add_oneoff(dateStr, titleInput.value, "");
+      neatocal_render();
+      neatocal_ui_render_day_modal(dateStr);
+      titleInput.value = "";
+      titleInput.focus();
+    });
+    titleInput.addEventListener("keydown", function(ev) {
+      if (ev.key === "Enter") { addBtn.click(); }
+    });
+  }
+
+  function update_recur_ui() {
+    let freq = modal.querySelector("#nc_freq").value;
+    let endType = modal.querySelector("#nc_end_type").value;
+    let byW = modal.querySelector("#nc_byweekday_wrap");
+    let untilW = modal.querySelector("#nc_until_wrap");
+    let countW = modal.querySelector("#nc_count_wrap");
+    if (byW) { byW.style.display = (freq === "weekly") ? "" : "none"; }
+    if (untilW) { untilW.style.display = (endType === "until") ? "" : "none"; }
+    if (countW) { countW.style.display = (endType === "count") ? "" : "none"; }
+  }
+
+  let freqSel = modal.querySelector("#nc_freq");
+  let endSel = modal.querySelector("#nc_end_type");
+  if (freqSel) { freqSel.addEventListener("change", update_recur_ui); }
+  if (endSel) { endSel.addEventListener("change", update_recur_ui); }
+  update_recur_ui();
+
+  let addSeriesBtn = modal.querySelector("#nc_add_series_btn");
+  if (addSeriesBtn && titleInput) {
+    addSeriesBtn.addEventListener("click", function() {
+      let t = titleInput.value;
+      if (!t || !t.trim()) { return; }
+      let freq = modal.querySelector("#nc_freq").value;
+      let interval = parseInt(modal.querySelector("#nc_interval").value || "1", 10);
+      if (isNaN(interval) || interval < 1) { interval = 1; }
+      let endType = modal.querySelector("#nc_end_type").value;
+      let end = { type: endType };
+      if (endType === "until") {
+        let u = modal.querySelector("#nc_until").value;
+        if (u) {
+          // input[type=date] returns YYYY-MM-DD
+          end.untilDate = u;
+        }
+      } else if (endType === "count") {
+        let c = parseInt(modal.querySelector("#nc_count").value || "1", 10);
+        if (isNaN(c) || c < 1) { c = 1; }
+        end.count = c;
+      }
+
+      let rule = { freq: freq, interval: interval };
+      if (freq === "weekly") {
+        let byWRaw = (modal.querySelector("#nc_byweekday").value || "").trim();
+        if (byWRaw) {
+          rule.byWeekday = byWRaw.split(",").map(x => parseInt(x.trim(), 10)).filter(x => !isNaN(x) && x >= 0 && x <= 6);
+        }
+      }
+      let now = new Date().toISOString();
+      neatocal_todo_add_series({
+        id: gen_id("series"),
+        title: t.trim(),
+        notes: "",
+        startDate: dateStr,
+        rule: rule,
+        end: end,
+        createdAt: now,
+        updatedAt: now
+      });
+      neatocal_render();
+      neatocal_ui_render_day_modal(dateStr);
+      titleInput.value = "";
+      titleInput.focus();
+    });
+  }
+
+  // Close on overlay click
+  overlay.addEventListener("click", function(e) {
+    if (e.target === overlay) { neatocal_ui_close_modals(); }
+  });
+
+  log("rendered", dateStr, "items", items.length);
+}
+
+function neatocal_build_share_url() {
+  // Does not include todos; only calendar params.
+  let params = new URLSearchParams();
+  let keys = [
+    "year", "layout", "start_month", "n_month", "start_day",
+    "highlight_color", "today_highlight_color", "cell_height",
+    "language", "weekday_code", "weekday_format", "month_code", "month_format",
+    "weekend_days", "show_moon_phase", "moon_phase_style", "moon_phase_position", "moon_phase_display",
+    "show_week_numbers"
+  ];
+  for (let i = 0; i < keys.length; i++) {
+    let k = keys[i];
+    let v = NEATOCAL_PARAM[k];
+    if (typeof v === "undefined" || v === null || v === "") { continue; }
+    if (Array.isArray(v)) {
+      params.set(k, v.join(","));
+    } else {
+      params.set(k, v.toString());
+    }
+  }
+  return window.location.origin + window.location.pathname + "?" + params.toString();
+}
+
+function neatocal_ui_open_settings_modal() {
+  let log = dbg_log("uiOpenSettings");
+  neatocal_ui_ensure_modals();
+  let overlay = document.getElementById("nc_settings_modal");
+  if (!overlay) { return; }
+  overlay.classList.add("visible");
+  NEATOCAL_UI.modalType = "settings";
+
+  let modal = overlay.querySelector(".nc-modal");
+  modal.innerHTML = "";
+
+  let header = document.createElement("div");
+  header.classList.add("nc-modal-header");
+  header.innerHTML = "<div class='nc-modal-title'>Settings</div><div class='nc-modal-subtitle'>Saved locally</div>";
+  let closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.classList.add("nc-modal-close");
+  closeBtn.textContent = "Close";
+  closeBtn.addEventListener("click", function() { neatocal_ui_close_modals(); });
+  header.appendChild(closeBtn);
+  modal.appendChild(header);
+
+  let form = document.createElement("div");
+  form.classList.add("nc-settings-form");
+
+  function add_field(label, inputEl) {
+    let row = document.createElement("label");
+    row.classList.add("nc-settings-row");
+    let span = document.createElement("span");
+    span.textContent = label;
+    row.appendChild(span);
+    row.appendChild(inputEl);
+    form.appendChild(row);
+  }
+
+  let year = document.createElement("input");
+  year.type = "number";
+  year.value = NEATOCAL_PARAM.year;
+  add_field("Year", year);
+
+  let layout = document.createElement("select");
+  layout.innerHTML = "<option value='default'>default</option><option value='aligned-weekdays'>aligned-weekdays</option><option value='hallon-almanackan'>hallon-almanackan</option>";
+  layout.value = NEATOCAL_PARAM.layout || "default";
+  add_field("Layout", layout);
+
+  let startMonth = document.createElement("input");
+  startMonth.type = "number";
+  startMonth.min = "0";
+  startMonth.max = "11";
+  startMonth.value = NEATOCAL_PARAM.start_month;
+  add_field("Start month (0-11)", startMonth);
+
+  let nMonth = document.createElement("input");
+  nMonth.type = "number";
+  nMonth.min = "1";
+  nMonth.value = NEATOCAL_PARAM.n_month;
+  add_field("Months shown", nMonth);
+
+  let startDay = document.createElement("input");
+  startDay.type = "number";
+  startDay.min = "0";
+  startDay.max = "6";
+  startDay.value = NEATOCAL_PARAM.start_day;
+  add_field("Start day (aligned)", startDay);
+
+  let weekendDays = document.createElement("input");
+  weekendDays.type = "text";
+  weekendDays.value = Array.isArray(NEATOCAL_PARAM.weekend_days) ? NEATOCAL_PARAM.weekend_days.join(",") : "";
+  add_field("Weekend days (0-6)", weekendDays);
+
+  let highlight = document.createElement("input");
+  highlight.type = "text";
+  highlight.value = NEATOCAL_PARAM.highlight_color || "";
+  add_field("Weekend color", highlight);
+
+  let todayInput = document.createElement("input");
+  todayInput.type = "text";
+  todayInput.value = NEATOCAL_PARAM.today_highlight_color || "";
+  add_field("Today color", todayInput);
+
+  let cellH = document.createElement("input");
+  cellH.type = "text";
+  cellH.value = NEATOCAL_PARAM.cell_height || "";
+  add_field("Cell height", cellH);
+
+  let showWeeks = document.createElement("select");
+  showWeeks.innerHTML = "<option value='false'>false</option><option value='true'>true</option>";
+  showWeeks.value = NEATOCAL_PARAM.show_week_numbers ? "true" : "false";
+  add_field("Show week numbers", showWeeks);
+
+  let showMoon = document.createElement("select");
+  showMoon.innerHTML = "<option value='false'>false</option><option value='true'>true</option>";
+  showMoon.value = NEATOCAL_PARAM.show_moon_phase ? "true" : "false";
+  add_field("Show moon phase", showMoon);
+
+  let moonStyle = document.createElement("select");
+  moonStyle.innerHTML = "<option value='css'>css</option><option value='symbol'>symbol</option><option value='name'>name</option>";
+  moonStyle.value = NEATOCAL_PARAM.moon_phase_style || "css";
+  add_field("Moon style", moonStyle);
+
+  let moonPos = document.createElement("select");
+  moonPos.innerHTML = "<option value='below'>below</option><option value='inline'>inline</option>";
+  moonPos.value = NEATOCAL_PARAM.moon_phase_position || "below";
+  add_field("Moon position", moonPos);
+
+  let moonDisp = document.createElement("select");
+  moonDisp.innerHTML = "<option value='changes'>changes</option><option value='all'>all</option>";
+  moonDisp.value = NEATOCAL_PARAM.moon_phase_display || "changes";
+  add_field("Moon display", moonDisp);
+
+  modal.appendChild(form);
+
+  let actions = document.createElement("div");
+  actions.classList.add("nc-settings-actions");
+
+  let saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.classList.add("nc-add-btn");
+  saveBtn.textContent = "Save";
+  saveBtn.addEventListener("click", function() {
+    NEATOCAL_PARAM.year = parseInt(year.value || NEATOCAL_PARAM.year, 10);
+    NEATOCAL_PARAM.layout = layout.value;
+    NEATOCAL_PARAM.start_month = parseInt(startMonth.value || "0", 10);
+    NEATOCAL_PARAM.n_month = parseInt(nMonth.value || "12", 10);
+    NEATOCAL_PARAM.start_day = parseInt(startDay.value || "1", 10);
+    NEATOCAL_PARAM.weekend_days = (weekendDays.value || "").split(",").map(x => parseInt(x.trim(), 10)).filter(x => !isNaN(x) && x >= 0 && x <= 6);
+    NEATOCAL_PARAM.highlight_color = highlight.value || NEATOCAL_PARAM.highlight_color;
+    NEATOCAL_PARAM.today_highlight_color = todayInput.value || "";
+    NEATOCAL_PARAM.cell_height = cellH.value || "";
+    NEATOCAL_PARAM.show_week_numbers = (showWeeks.value === "true");
+    NEATOCAL_PARAM.show_moon_phase = (showMoon.value === "true");
+    NEATOCAL_PARAM.moon_phase_style = moonStyle.value;
+    NEATOCAL_PARAM.moon_phase_position = moonPos.value;
+    NEATOCAL_PARAM.moon_phase_display = moonDisp.value;
+
+    neatocal_settings_save();
+    neatocal_render();
+    neatocal_ui_close_modals();
+  });
+
+  let copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.classList.add("nc-add-btn", "secondary");
+  copyBtn.textContent = "Copy sharable link";
+  copyBtn.addEventListener("click", function() {
+    let url = neatocal_build_share_url();
+    dbg_log("settingsCopyLink")(url);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url);
+    } else {
+      window.prompt("Copy this URL:", url);
+    }
+  });
+
+  actions.appendChild(saveBtn);
+  actions.appendChild(copyBtn);
+  modal.appendChild(actions);
+
+  overlay.addEventListener("click", function(e) {
+    if (e.target === overlay) { neatocal_ui_close_modals(); }
+  });
+
+  log("opened");
+}
+
+function neatocal_ui_bind_events_once() {
+  if (NEATOCAL_UI.bound) { return; }
+  let log = dbg_log("uiBind");
+
+  // Settings button
+  let btn = document.getElementById("ui_settings_btn");
+  if (btn) {
+    btn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      neatocal_ui_open_settings_modal();
+    });
+  }
+
+  // Cell click delegation + checkbox toggles
+  let table = document.getElementById("ui_table");
+  if (table) {
+    table.addEventListener("click", function(e) {
+      let tgt = e.target;
+
+      // Checkbox toggle inside cell
+      if (tgt && tgt.classList && tgt.classList.contains("todo-checkbox")) {
+        e.stopPropagation();
+        let dateStr = tgt.dataset.date;
+        let kind = tgt.dataset.kind;
+        let checked = tgt.checked;
+        dbg_log("uiCellToggle")(dateStr, kind, checked);
+        if (kind === "oneoff") {
+          neatocal_todo_toggle_oneoff(dateStr, tgt.dataset.id, checked);
+        } else if (kind === "series") {
+          neatocal_todo_set_instance_state(tgt.dataset.seriesId, dateStr, { completed: checked });
+        }
+        neatocal_render();
+        if (NEATOCAL_UI.modalType === "day" && NEATOCAL_UI.activeDate === dateStr) {
+          neatocal_ui_render_day_modal(dateStr);
+        }
+        return;
+      }
+
+      // Otherwise open modal if we clicked a valid day cell
+      let td = neatocal_ui_find_td(tgt);
+      if (!td) { return; }
+      let dateStr = neatocal_ui_td_to_date(td);
+      dbg_log("uiCellClick")("td.id", td.id, "resolved", dateStr);
+      if (!dateStr) { return; }
+      neatocal_ui_open_day_modal(dateStr);
+    });
+  }
+
+  // Escape closes modals
+  window.addEventListener("keydown", function(ev) {
+    if (ev.key === "Escape") { neatocal_ui_close_modals(); }
+  });
+
+  NEATOCAL_UI.bound = true;
+  log("bound");
+}
+
+function neatocal_ui_init() {
+  neatocal_ui_ensure_topbar();
+  neatocal_ui_ensure_modals();
+  neatocal_ui_bind_events_once();
 }
 
 function loadXHR(url, _cb, _errcb) {
@@ -1481,6 +2842,13 @@ function neatocal_setup_ics_drop() {
 }
 
 function neatocal_init() {
+  // Load local-only settings first; URL params (below) can override.
+  neatocal_settings_load();
+  neatocal_todo_load();
+
+  // Create/bind UI affordances (progress text, gear, modals, click handlers)
+  neatocal_ui_init();
+
   let sp = new URLSearchParams(window.location.search);
 
   // peel off parameters from URL
@@ -1802,6 +3170,9 @@ function neatocal_init() {
 }
 
 function neatocal_render() {
+  // recompute todo cache once per render; render_* functions will read it
+  neatocal_todo_recompute_cache();
+  neatocal_update_header_progress();
 
   let cur_start_month = NEATOCAL_PARAM.start_month;
   let month_remain = NEATOCAL_PARAM.n_month;
