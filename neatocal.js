@@ -284,6 +284,8 @@ function render_cell_data(td, yyyy_mm_dd) {
   for (let i = 0; i < val.length; i++) {
     let item = val[i];
 
+    // for simple data, just render text
+    //
     if (typeof item === "string") {
       let txt = H.div();
       txt.innerHTML = item;
@@ -293,6 +295,10 @@ function render_cell_data(td, yyyy_mm_dd) {
       continue;
     }
 
+    // for more complex date information,
+    // from iCal, say, decorate with extra
+    // markup
+    //
     let line = H.div();
     line.classList.add("event");
     line.textContent = item.title || "";
@@ -1464,6 +1470,8 @@ function neatocal_setup_ics_drop() {
     if (input.files) {
       ics_handle_files(input.files);
       input.value = "";
+
+      hide();
     }
   });
 
